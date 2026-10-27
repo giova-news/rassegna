@@ -20,6 +20,9 @@ BASE_URL = os.environ.get("BASE_URL", "https://giova-news.github.io/rassegna")
 OUT = "docs"
 claude = anthropic.Anthropic()
 
+def solo_testo(r):
+    return "".join(b.text for b in r.content if b.type == "text")
+
 def raccogli():
     items = []
     for lang, urls in FEEDS.items():
@@ -43,9 +46,9 @@ coperte dalla stampa italiana. Evita i grandi temi internazionali.
 Voti passati di Giovanni (impara i suoi gusti): {json.dumps(voti, ensure_ascii=False)}
 Articoli: {json.dumps(items, ensure_ascii=False)}
 Rispondi SOLO con JSON: [{{"link":..., "lang":..., "title":..., "pitch_it": "una frase in italiano"}}]"""
-    r = claude.messages.create(model=MODELLO, max_tokens=1500,
+    r = claude.messages.create(model=MODELLO, max_tokens=4000,
                                messages=[{"role": "user", "content": prompt}])
-    t = r.content[0].text
+    t = solo_testo(r)
     return json.loads(t[t.find("["):t.rfind("]") + 1])
 
 def testo_articolo(a):
@@ -57,9 +60,9 @@ def testo_articolo(a):
         istr = "Scrivi un riassunto approfondito (400 parole) nella lingua originale dell'articolo."
     else:
         return testo[:8000]
-    r = claude.messages.create(model=MODELLO, max_tokens=1500,
+    r = claude.messages.create(model=MODELLO, max_tokens=4000,
         messages=[{"role": "user", "content": f"{istr}\n\nTitolo: {a['title']}\n\n{testo or a['title']}"}])
-    return r.content[0].text
+    return solo_testo(r)
 
 def voce(testo, lang, path):
     rate = "-20%" if lang == "de" else "+0%"
