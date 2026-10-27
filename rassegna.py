@@ -1,5 +1,4 @@
-import os, json, datetime, feedparser, trafilatura, anthropic
-from openai import OpenAI
+import os, json, datetime, asyncio, feedparser, trafilatura, anthropic, edge_tts
 from email.utils import format_datetime
 
 FEEDS = {
@@ -13,11 +12,13 @@ FEEDS = {
   "de": ["https://www.nachrichtenleicht.de/nachrichtenleicht-nachrichten-100.rss",
          "https://www.spiegel.de/schlagzeilen/index.rss"],
 }
-VOCI = {"es": "nova", "fr": "shimmer", "en": "alloy", "de": "onyx", "it": "echo"}
+VOCI = {"es": "es-ES-ElviraNeural", "fr": "fr-FR-DeniseNeural",
+        "en": "en-GB-RyanNeural", "de": "de-DE-KatjaNeural",
+        "it": "it-IT-DiegoNeural"}
+MODELLO = "claude-sonnet-5-5"
 BASE_URL = os.environ.get("BASE_URL", "https://giova-news.github.io/rassegna")
 OUT = "docs"
 claude = anthropic.Anthropic()
-oai = OpenAI()
 
 def raccogli():
     items = []
@@ -42,7 +43,7 @@ coperte dalla stampa italiana. Evita i grandi temi internazionali.
 Voti passati di Giovanni (impara i suoi gusti): {json.dumps(voti, ensure_ascii=False)}
 Articoli: {json.dumps(items, ensure_ascii=False)}
 Rispondi SOLO con JSON: [{{"link":..., "lang":..., "title":..., "pitch_it": "una frase in italiano"}}]"""
-    r = claude.messages.create(model="claude-sonnet-5-5", max_tokens=1500,
+    r = claude.messages.create(model=MODELLO, max_tokens=1500,
                                messages=[{"role": "user", "content": prompt}])
     t = r.content[0].text
     return json.loads(t[t.find("["):t.rfind("]") + 1])
@@ -55,16 +56,14 @@ def testo_articolo(a):
     elif not testo or len(testo) < 800:
         istr = "Scrivi un riassunto approfondito (400 parole) nella lingua originale dell'articolo."
     else:
-        return testo[:4000]
-    r = claude.messages.create(model="claude-sonnet-5-5", max_tokens=1500,
+        return testo[:8000]
+    r = claude.messages.create(model=MODELLO, max_tokens=1500,
         messages=[{"role": "user", "content": f"{istr}\n\nTitolo: {a['title']}\n\n{testo or a['title']}"}])
     return r.content[0].text
 
 def voce(testo, lang, path):
-    speed = 0.85 if lang == "de" else 1.0
-    with oai.audio.speech.with_streaming_response.create(
-            model="tts-1", voice=VOCI[lang], input=testo[:4000], speed=speed) as r:
-        r.stream_to_file(path)
+    rate = "-20%" if lang == "de" else "+0%"
+    asyncio.run(edge_tts.Communicate(testo, VOCI[lang], rate=rate).save(path))
 
 def main():
     os.makedirs(OUT, exist_ok=True)
@@ -90,13 +89,14 @@ def scrivi_feed(nuovi):
                          "date": format_datetime(ora - datetime.timedelta(minutes=k))})
     tutti = tutti[:40]
     json.dump(tutti, open(db, "w"), ensure_ascii=False)
-    items = "".join(f"<item><title>{e['title']}</title><guid>{e['file']}</guid>"
+    esc = lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    items = "".join(f"<item><title>{esc(e['title'])}</title><guid>{e['file']}</guid>"
         f"<pubDate>{e['date']}</pubDate><enclosure url='{BASE_URL}/{e['file']}' type='audio/mpeg'/></item>"
         for e in tutti)
     xml = ("<?xml version='1.0' encoding='UTF-8'?><rss version='2.0'><channel>"
            f"<title>Rassegna poliglotta</title><link>{BASE_URL}</link>"
            f"<description>Rassegna personale</description>{items}</channel></rss>")
-    open(f"{OUT}/feed.xml", "w").write(xml)
+    open(f"{OUT}/feed.xml", "w", encoding="utf-8").write(xml)
 
 if __name__ == "__main__":
     main()
