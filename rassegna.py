@@ -67,10 +67,15 @@ America Latina. Evita i grandi temi internazionali.
 Voti passati di Giovanni (impara i suoi gusti): {json.dumps(voti, ensure_ascii=False)}
 Articoli: {json.dumps(items, ensure_ascii=False)}
 Rispondi SOLO con JSON: [{{"link":..., "lang":..., "title":..., "pitch_it": "una frase in italiano"}}]"""
-    r = claude.messages.create(model=MODELLO, max_tokens=4000,
-                               messages=[{"role": "user", "content": prompt}])
-    t = solo_testo(r)
-    return json.loads(t[t.find("["):t.rfind("]") + 1])
+    for tentativo in range(3):
+        r = claude.messages.create(model=MODELLO, max_tokens=16000,
+                                   messages=[{"role": "user", "content": prompt}])
+        t = solo_testo(r)
+        try:
+            return json.loads(t[t.find("["):t.rfind("]") + 1])
+        except Exception:
+            print(f"Risposta non valida (tentativo {tentativo + 1}, motivo: {r.stop_reason}): {t[:300]!r}")
+    raise RuntimeError("Claude non ha restituito una lista valida dopo 3 tentativi")
 
 def scarica(link):
     try:
@@ -87,7 +92,7 @@ def prepara(a):
         return None
     if a["lang"] != "de":
         return testo[:8000]
-    r = claude.messages.create(model=MODELLO, max_tokens=4000,
+    r = claude.messages.create(model=MODELLO, max_tokens=8000,
         messages=[{"role": "user", "content":
             "Riscrivi questo articolo in tedesco semplicissimo (livello A2): frasi brevi, "
             "parole comuni, massimo 250 parole. Rispondi solo con il testo tedesco, "
