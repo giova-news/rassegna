@@ -140,7 +140,7 @@ def scrivi_feed(nuovi):
     ora = datetime.datetime.now(datetime.timezone.utc)
     for k, (t, f) in enumerate(nuovi):
         tutti.insert(k, {"title": t, "file": f,
-                         "date": format_datetime(ora - datetime.timedelta(minutes=k))})
+                         "date": format_datetime(ora - datetime.timedelta(minutes=len(nuovi) - 1 - k))})
     tutti = tutti[:40]
     json.dump(tutti, open(db, "w", encoding="utf-8"), ensure_ascii=False)
     esc = lambda s: s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
